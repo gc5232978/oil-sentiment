@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "oil-sentiment"
+version = "0.1.0"
+license = "LICENSE.md"
+description = "Oil news sentiment classification"
+authors = ["gc5232978 <gc5232978@gmail.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.10"
+httpx = "^0.27.0"
+selectolax = "^0.3.21"
+rich = "^13.7.1"
+transformers = "^4.41.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
