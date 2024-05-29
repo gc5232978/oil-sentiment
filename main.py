@@ -1,13 +1,12 @@
-import os
 import httpx
+import asyncio
 import datetime
 from rich import print
-from typing import List
-from dotenv import load_dotenv
+from time import perf_counter
+from typing import List, Dict
 from transformers import pipeline
 from dataclasses import dataclass
 from selectolax.parser import HTMLParser
-load_dotenv()
 
 
 @dataclass
@@ -33,13 +32,16 @@ class Sentiment:
     score: float
 
 
-def get_pages(pages: int) -> List[Page]:
+async def get_pages(pages: int) -> List[Page]:
     all_pages: List[Page] = []
-    with httpx.Client() as client:
+    async with httpx.AsyncClient() as client:
+        tasks = []
         for page in range(1, pages +1):
             url = f"https://oilprice.com/Latest-Energy-News/World-News/Page-{page}.html"
-            resp = client.get(url).text
-            page = Page(url=url, html=resp)
+            tasks.append(client.get(url))
+        responses = await asyncio.gather(*tasks)
+        for resp in responses:
+            page = Page(url=resp.request.url, html=resp.text)
             all_pages.append(page)
     return all_pages
 
@@ -79,12 +81,16 @@ def get_sentiment(all_articles: List[Article]) -> List[Sentiment]:
     return all_sentiment
 
 
-def main():
-    all_pages = get_pages(5)
+async def main():
+    start = perf_counter()
+    all_pages = await get_pages(10)
     all_articles = parse_pages(all_pages)
     results = get_sentiment(all_articles)
     print(results)
+    end = perf_counter()
+    time = end - start
+    print(f"Completed in {round(time, 2)} seconds")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
