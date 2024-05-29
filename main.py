@@ -81,7 +81,7 @@ def get_sentiment(all_articles: List[Article]) -> List[Sentiment]:
     return all_sentiment
 
 
-async def main():
+async def main() -> None:
     start = perf_counter()
     all_pages = await get_pages(10)
     all_articles = parse_pages(all_pages)
