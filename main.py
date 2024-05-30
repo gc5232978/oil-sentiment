@@ -1,9 +1,10 @@
 import httpx
+import sqlite3
 import asyncio
 import datetime
 from rich import print
 from time import perf_counter
-from typing import List, Dict
+from typing import List
 from transformers import pipeline
 from dataclasses import dataclass
 from selectolax.parser import HTMLParser
@@ -81,15 +82,33 @@ def get_sentiment(all_articles: List[Article]) -> List[Sentiment]:
     return all_sentiment
 
 
+def save_sentiment(all_sentiment: List[Sentiment]) -> None:
+    db_file = "database.db"
+    with sqlite3.connect(db_file) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS sentiment
+                      (url TEXT PRIMARY KEY, date TEXT, time TEXT, 
+                       summary TEXT, sentiment TEXT, score REAL)''')
+        for sentiment in all_sentiment:
+            cursor.execute("INSERT OR IGNORE INTO sentiment VALUES (?,?,?,?,?,?)",
+                      (sentiment.url, sentiment.date, sentiment.time, 
+                       sentiment.summary, sentiment.sentiment, sentiment.score))
+        conn.commit()
+
+
 async def main() -> None:
     start = perf_counter()
+    print("Fetching Pages...")
     all_pages = await get_pages(10)
+    print("Parsing Html...")
     all_articles = parse_pages(all_pages)
-    results = get_sentiment(all_articles)
-    print(results)
+    print("Calculating Sentiment...")
+    all_sentiment = get_sentiment(all_articles)
+    print("Saving Database...")
+    save_sentiment(all_sentiment)
     end = perf_counter()
     time = end - start
-    print(f"Completed in {round(time, 2)} seconds")
+    print(f"Completed in {round(time, 2)} seconds.")
 
 
 if __name__ == "__main__":
