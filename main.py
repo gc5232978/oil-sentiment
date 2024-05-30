@@ -40,25 +40,31 @@ async def get_pages(pages: int) -> List[Page]:
         for page in range(1, pages +1):
             url = f"https://oilprice.com/Latest-Energy-News/World-News/Page-{page}.html"
             tasks.append(client.get(url))
-        responses = await asyncio.gather(*tasks)
-        for resp in responses:
-            page = Page(url=resp.request.url, html=resp.text)
-            all_pages.append(page)
+        try:
+            responses = await asyncio.gather(*tasks)
+            for resp in responses:
+                page = Page(url=resp.request.url, html=resp.text)
+                all_pages.append(page)
+        except httpx.HTTPError as e:
+            print(f"HTTP Error: {e}")
     return all_pages
 
 
 def parse_pages(all_pages: List[Page]) -> List[Article]:
     all_articles: List[Article] = []
     for page in all_pages:
-        html = HTMLParser(page.html)
-        articles: List[str] = html.css("div.categoryArticle__content")
-        for article in articles:
-            url: str = article.css_first("a").attrs["href"]
-            date: str = article.css_first("p.categoryArticle__meta").text().split("|")[0].strip()
-            summary: str = article.css_first("p.categoryArticle__excerpt").text()
-            summary = summary.replace("…","").replace(".", "").replace("\xa0", " ").replace("\n", " ")
-            article = Article(date=date, url=url, summary=summary)
-            all_articles.append(article)
+        try:
+            html = HTMLParser(page.html)
+            articles: List[str] = html.css("div.categoryArticle__content")
+            for article in articles:
+                url: str = article.css_first("a").attrs["href"]
+                date: str = article.css_first("p.categoryArticle__meta").text().split("|")[0].strip()
+                summary: str = article.css_first("p.categoryArticle__excerpt").text()
+                summary = summary.replace("…","").replace(".", "").replace("\xa0", " ").replace("\n", " ")
+                article = Article(date=date, url=url, summary=summary)
+                all_articles.append(article)
+        except Exception as e:
+            print(f"Error parsing page: {e}")
     return all_articles
 
 
@@ -68,38 +74,44 @@ def get_sentiment(all_articles: List[Article]) -> List[Sentiment]:
         model="mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis"
     )
     for article in all_articles:
-        trans = pipe(article.summary)
-        dt = datetime.datetime.strptime(article.date, "%B %d, %Y at %H:%M")
-        sentiment = Sentiment(
-            date=dt.date().strftime("%B %d, %Y"),
-            time=dt.time().strftime("%H:%M"),
-            url=article.url,
-            summary=article.summary,
-            sentiment=trans[0]["label"],
-            score=round(trans[0]["score"], 2),
-        )
-        all_sentiment.append(sentiment)
+        try:
+            trans = pipe(article.summary)
+            dt = datetime.datetime.strptime(article.date, "%B %d, %Y at %H:%M")
+            sentiment = Sentiment(
+                date=dt.date().strftime("%B %d, %Y"),
+                time=dt.time().strftime("%H:%M"),
+                url=article.url,
+                summary=article.summary,
+                sentiment=trans[0]["label"],
+                score=round(trans[0]["score"], 2),
+            )
+            all_sentiment.append(sentiment)
+        except Exception as e:
+            print(f"Error getting sentiment: {e}")
     return all_sentiment
 
 
 def save_sentiment(all_sentiment: List[Sentiment]) -> None:
     db_file = "database.db"
-    with sqlite3.connect(db_file) as conn:
-        cursor = conn.cursor()
-        cursor.execute('''CREATE TABLE IF NOT EXISTS sentiment
-                      (url TEXT PRIMARY KEY, date TEXT, time TEXT, 
-                       summary TEXT, sentiment TEXT, score REAL)''')
-        for sentiment in all_sentiment:
-            cursor.execute("INSERT OR IGNORE INTO sentiment VALUES (?,?,?,?,?,?)",
-                      (sentiment.url, sentiment.date, sentiment.time, 
-                       sentiment.summary, sentiment.sentiment, sentiment.score))
-        conn.commit()
+    try:
+        with sqlite3.connect(db_file) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''CREATE TABLE IF NOT EXISTS sentiment
+                        (url TEXT PRIMARY KEY, date TEXT, time TEXT, 
+                        summary TEXT, sentiment TEXT, score REAL)''')
+            for sentiment in all_sentiment:
+                cursor.execute("INSERT OR IGNORE INTO sentiment VALUES (?,?,?,?,?,?)",
+                        (sentiment.url, sentiment.date, sentiment.time, 
+                        sentiment.summary, sentiment.sentiment, sentiment.score))
+            conn.commit()
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
 
 
 async def main() -> None:
     start = perf_counter()
     print("Fetching Pages...")
-    all_pages = await get_pages(10)
+    all_pages = await get_pages(5)
     print("Parsing Html...")
     all_articles = parse_pages(all_pages)
     print("Calculating Sentiment...")
@@ -113,3 +125,4 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
+
